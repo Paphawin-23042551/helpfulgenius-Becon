@@ -2,514 +2,410 @@
 <html lang="en">
 
 <head>
-       
     <meta charset="UTF-8">
-       
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Real-time IoT Monitoring Dashboard</title>
-       
-    <script src="https://cdn.tailwindcss.com"></script>
-       
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-           
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.2.0/paho-mqtt.min.js"></script>
-       
-            <style>
-        body {
-            box-sizing: border-box;
+    <title>Smart Home IoT Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"
+        type="text/javascript"></script>
+    <style>
+        .card-sensor {
+            border-left: 5px solid;
+            transition: all 0.3s ease;
+        }
 
-            .sensor-card {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                transition: all 0.3s ease; }
+        .status-on {
+            border-color: #dc3545 !important;
+            background-color: #f8d7da;
+        }
 
-                .sensor-card:hover {
-                    transform: translateY(-2px);
-                    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-                }
+        /* Red for Alert/On */
+        .status-warn {
+            border-color: #ffc107 !important;
+            background-color: #fff3cd;
+        }
 
-                .weather-card {
-                    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-                }
+        /* Yellow for Warning */
+        .status-ok {
+            border-color: #198754 !important;
+            background-color: #d1e7dd;
+        }
 
-                .data-table {
-                    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-                }
+        /* Green for Normal/Off */
+        .status-info {
+            border-color: #0d6efd !important;
+            background-color: #cff4fc;
+        }
 
-                .status-indicator {
-                    width: 12px;
-                    height: 12px;
-                    border-radius: 50%;
-                    display: inline-block;
-                    margin-right: 8px;
-                }
+        /* Blue for Info/Knock */
+        .status-na {
+            border-color: #6c757d !important;
+            background-color: #e2e3e5;
+        }
 
-                .status-normal {
-                    background-color: #10b981;
-                }
+        /* Gray for N/A */
 
-                .status-warning {
-                    background-color: #f59e0b;
-                }
-
-                .status-danger {
-                    background-color: #ef4444;
-                }
-
-                .pulse {
-                    animation: pulse 2s infinite;
-                }
-
-                @keyframes pulse {
-
-                    0%,
-                    100% {
-                        opacity: 1;
-                    }
-
-                    50% {
-                        opacity: 0.5;
-                    }
-                }
-            }
+        /* Custom styling for status badge */
+        .badge-status {
+            font-size: 0.9em;
+            padding: 0.4em 0.7em;
+        }
     </style>
 </head>
 
-<body class="bg-gray-900 text-white min-h-full">
-        <div class="container mx-auto p-6 max-w-7xl">
-                <div class="text-center mb-8">
-                        <h1
-                class="text-4xl font-bold mb-2 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-                                Real-time IoT Monitoring Dashboard
-                            </h1>
-                        <p class="text-gray-300">Dashboard for Sensor and Weather Data Tracking</p>
-                        <div class="text-sm text-gray-400 mt-2">
-                                Last Update: <span id="lastUpdate" class="text-green-400"></span>
-                            </div>
-                    </div>
+<body>
+    <div class="container-fluid p-4">
+        <h1 class="mb-4 text-center">🏠 Smart Home Sensor & API Dashboard 🌍</h1>
+        <div class="alert alert-info text-center" role="alert">
+            **สถานะ Broker:** เชื่อมต่อกับ `test.mosquitto.org:8081` (WSS)
+        </div>
 
-                <div class="grid grid-cols-6 gap-6 mb-8">
-                        <div class="sensor-card rounded-xl p-6 text-center">
-                                <div class="text-3xl mb-3">🔥</div>
-                                <h3 class="text-lg font-semibold mb-2">Fire Detection</h3>
-                                <div class="text-2xl font-bold mb-2" id="fireStatus">Normal</div>
-                                <div class="status-indicator status-normal pulse" id="fireIndicator"></div>
-                                <span class="text-sm">Status</span>
-                            </div>
+        <h2 class="mt-4 mb-3 text-primary">Live Sensor Status (อัปเดตทุก 2 วิ)</h2>
+        <div class="row" id="sensor-cards">
+            <div class="col-md-3 mb-4">
+                <div class="card shadow-sm card-sensor status-na" id="card-fire">
+                    <div class="card-body">
+                        <h5 class="card-title">🔥 ไฟไหม้ (Flame)</h5>
+                        <p class="card-text">สถานะ: <span class="badge badge-status bg-secondary"
+                                id="fire-status">กำลังรอข้อมูล...</span></p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-4">
+                <div class="card shadow-sm card-sensor status-na" id="card-gas">
+                    <div class="card-body">
+                        <h5 class="card-title">💨 แก๊สรั่ว (Gas Level)</h5>
+                        <p class="card-text">ค่า Analog: <strong id="gas-value">N/A</strong></p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-4">
+                <div class="card shadow-sm card-sensor status-na" id="card-temp">
+                    <div class="card-body">
+                        <h5 class="card-title">🌡️ อุณหภูมิ (Temp)</h5>
+                        <p class="card-text"><strong id="temp-value">N/A</strong></p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-4">
+                <div class="card shadow-sm card-sensor status-na" id="card-knock">
+                    <div class="card-body">
+                        <h5 class="card-title">🚪 คนเคาะประตู / เสียงดัง</h5>
+                        <p class="card-text">เคาะ: <span class="badge bg-secondary" id="knock-status">ไม่มี</span></p>
+                        <p class="card-text">เสียง: <span class="badge bg-secondary" id="sound-status">ไม่มี</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-                        <div class="sensor-card rounded-xl p-6 text-center">
-                                <div class="text-3xl mb-3">🌡️</div>
-                                <h3 class="text-lg font-semibold mb-2">Temperature</h3>
-                                <div class="text-2xl font-bold mb-2" id="temperature">25°C</div>
-                                <div class="status-indicator status-normal" id="tempIndicator"></div>
-                                <span class="text-sm">Normal</span>
-                            </div>
+        <h2 class="mt-5 mb-3 text-success">External Disaster Alerts (API Status)</h2>
+        <div class="row">
+            <div class="col-md-4 mb-4">
+                <div class="card shadow-sm card-sensor status-na" id="card-storm">
+                    <div class="card-body">
+                        <h5 class="card-title">🌀 พายุ / ลม</h5>
+                        <p class="card-text">ความเร็วลม: <strong id="wind-speed">N/A</strong></p>
+                        <p class="card-text">สถานะ: <span class="badge badge-status bg-secondary"
+                                id="storm-status">กำลังรอข้อมูล...</span></p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4">
+                <div class="card shadow-sm card-sensor status-na" id="card-quake">
+                    <div class="card-body">
+                        <h5 class="card-title">💥 แผ่นดินไหว</h5>
+                        <p class="card-text">ขนาด (Mag): <strong id="quake-mag">N/A</strong></p>
+                        <p class="card-text">สถานะ: <span class="badge badge-status bg-secondary"
+                                id="quake-status">กำลังรอข้อมูล...</span></p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4">
+                <div class="card shadow-sm card-sensor status-na" id="card-flood">
+                    <div class="card-body">
+                        <h5 class="card-title">🌧️ น้ำท่วม / ฝนสะสม</h5>
+                        <p class="card-text">ปริมาณฝน (24h): <strong id="flood-level">N/A</strong></p>
+                        <p class="card-text">สถานะ: <span class="badge badge-status bg-secondary"
+                                id="flood-status">กำลังรอข้อมูล...</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-                        <div class="sensor-card rounded-xl p-6 text-center">
-                                <div class="text-3xl mb-3">💧</div>
-                                <h3 class="text-lg font-semibold mb-2">Humidity</h3>
-                                <div class="text-2xl font-bold mb-2" id="humidity">65%</div>
-                                <div class="status-indicator status-normal" id="humidityIndicator"></div>
-                                <span class="text-sm">Normal</span>
-                            </div>
-                       
-                        <div class="sensor-card rounded-xl p-6 text-center">
-                                <div class="text-3xl mb-3">🚨</div>
-                                <h3 class="text-lg font-semibold mb-2">Gas Sensor Value</h3>
-                                <div class="text-2xl font-bold mb-2" id="gasValue">0</div>
-                                <div class="status-indicator status-normal" id="gasIndicator"></div>
-                                <span class="text-sm">Normal</span>
-                            </div>
-                       
-                        <div class="sensor-card rounded-xl p-6 text-center">
-                                <div class="text-3xl mb-3">🚪</div>
-                                <h3 class="text-lg font-semibold mb-2">Door Knock</h3>
-                                <div class="text-2xl font-bold mb-2" id="doorKnock">None</div>
-                                <div class="status-indicator status-normal" id="doorIndicator"></div>
-                                <span class="text-sm">Status</span>
-                            </div>
+        <h2 class="mt-5 mb-3 text-warning">Data Log (บันทึกทุก 5 นาที)</h2>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Temp. (°C)</th>
+                        <th>Gas Value</th>
+                        <th>Fire Alert</th>
+                        <th>Door Knock</th>
+                        <th>Wind Speed (km/h)</th>
+                        <th>Quake Mag.</th>
+                    </tr>
+                </thead>
+                <tbody id="log-table-body">
+                </tbody>
+            </table>
+        </div>
+    </div>
 
-                        <div class="sensor-card rounded-xl p-6 text-center">
-                                <div class="text-3xl mb-3">🎤</div>
-                                <h3 class="text-lg font-semibold mb-2">Mic Sound</h3>
-                                <div class="text-2xl font-bold mb-2" id="micLevel">45 dB</div>
-                                <div class="status-indicator status-normal" id="micIndicator"></div>
-                                <span class="text-sm">Normal</span>
-                            </div>
-                    </div>
-
-                <div class="grid grid-cols-3 gap-6 mb-8">
-                        <div class="weather-card rounded-xl p-6">
-                                <div class="flex items-center mb-4">
-                                        <div class="text-3xl mr-3">🌍</div>
-                                        <h3 class="text-xl font-semibold">Earthquake</h3>
-                                    </div>
-                                <div class="space-y-2">
-                                        <div class="flex justify-between">
-                                                <span>Magnitude:</span>
-                                                <span id="earthquakeMagnitude" class="font-bold">2.1</span>
-                                            </div>
-                                        <div class="flex justify-between">
-                                                <span>Distance:</span>
-                                                <span id="earthquakeDistance">45 km</span>
-                                            </div>
-                                        <div class="flex justify-between">
-                                                <span>Status:</span>
-                                                <span id="earthquakeStatus" class="text-green-300">Safe</span>
-                                            </div>
-                                    </div>
-                            </div>
-
-                        <div class="weather-card rounded-xl p-6">
-                                <div class="flex items-center mb-4">
-                                        <div class="text-3xl mr-3">🌊</div>
-                                        <h3 class="text-xl font-semibold">Flood Risk (Rain)</h3>
-                                    </div>
-                                <div class="space-y-2">
-                                        <div class="flex justify-between">
-                                                <span>Rain Accumulation:</span>
-                                                <span id="floodLevel" class="font-bold">1.2 mm</span>
-                                            </div>
-                                        <div class="flex justify-between">
-                                                <span>Trend:</span>
-                                                <span id="floodTrend">N/A</span>
-                                            </div>
-                                        <div class="flex justify-between">
-                                                <span>Status:</span>
-                                                <span id="floodStatus" class="text-green-300">Normal</span>
-                                            </div>
-                                    </div>
-                            </div>
-
-                        <div class="weather-card rounded-xl p-6">
-                                <div class="flex items-center mb-4">
-                                        <div class="text-3xl mr-3">⛈️</div>
-                                        <h3 class="text-xl font-semibold">Storm / Wind</h3>
-                                    </div>
-                                <div class="space-y-2">
-                                        <div class="flex justify-between">
-                                                <span>Wind Speed:</span>
-                                                <span id="windSpeed" class="font-bold">15 km/h</span>
-                                            </div>
-                                        <div class="flex justify-between">
-                                                <span>Direction:</span>
-                                                <span id="windDirection">N/A</span>
-                                            </div>
-                                        <div class="flex justify-between">
-                                                <span>Status:</span>
-                                                <span id="stormStatus" class="text-green-300">Normal</span>
-                                            </div>
-                                    </div>
-                            </div>
-                    </div>
-
-                <div class="data-table rounded-xl p-6">
-                        <div class="flex justify-between items-center mb-4">
-                                <h3 class="text-xl font-semibold text-white">Data Log Table</h3>
-                                <div class="flex space-x-2">
-                                        <button onclick="exportData()"
-                        class="bg-white text-blue-600 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors">
-                                                📊 Export Data
-                                            </button>
-                                        <button onclick="refreshData()"
-                        class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors">
-                                                🔄 Refresh
-                                            </button>
-                                    </div>
-                            </div>
-                       
-                        <div class="overflow-x-auto">
-                                <table class="w-full text-sm">
-                                        <thead>
-                                                <tr class="bg-white bg-opacity-20 text-white">
-                                                        <th class="px-4 py-3 text-left">Time</th>
-                                                        <th class="px-4 py-3 text-left">Temp (°C)</th>
-                                                        <th class="px-4 py-3 text-left">Humidity (%)</th>
-                                                        <th class="px-4 py-3 text-left">Gas</th>
-                                                        <th class="px-4 py-3 text-left">Sound (dB)</th>
-                                                        <th class="px-4 py-3 text-left">Fire</th>
-                                                        <th class="px-4 py-3 text-left">Door</th>
-                                                        <th class="px-4 py-3 text-left">Status</th>
-                                                    </tr>
-                                            </thead>
-                                        <tbody id="dataTableBody" class="text-white">
-                                                </tbody>
-                                    </table>
-                            </div>
-                       
-                        <div class="mt-4 flex justify-between items-center text-sm text-white">
-                                <span>Showing <span id="recordCount">0</span> records</span>
-                                <div class="flex space-x-2">
-                                        <button onclick="prevPage()"
-                        class="px-3 py-1 bg-white bg-opacity-20 rounded hover:bg-opacity-30 transition-colors">Previous</button>
-                                        <span class="px-3 py-1">Page <span id="currentPage">1</span></span>
-                                        <button onclick="nextPage()"
-                        class="px-3 py-1 bg-white bg-opacity-20 rounded hover:bg-opacity-30 transition-colors">Next</button>
-                                </div>
-                            </div>
-                    </div>
-            </div>
-
-       
     <script>
-        // --- 1. GLOBAL VARIABLES ---
-        let sensorData = [];
-        let currentPage = 1;
-        const recordsPerPage = 10;
+        // --- 1. MQTT SETTINGS (แก้ไขให้ใช้ Public Test Broker: test.mosquitto.org) ---
+        const MQTT_HOST = "test.mosquitto.org";
+        const MQTT_PORT = 8081; // Port WSS สำหรับ test.mosquitto.org
+        // สร้าง Client ID ที่สุ่มมากขึ้นเพื่อหลีกเลี่ยงการชนกัน
+        const CLIENT_ID = "WebAppClient-" + Date.now() + Math.floor(Math.random() * 99999);
 
-        // --- MQTT SETTINGS (WebSockets) ---
-        const MQTT_HOST = 'broker.hivemq.com';
-        const MQTT_PORT = 8083; // Standard Port for WebSockets
+        // Topics
+        const SENSOR_DATA_TOPIC = "iot/website/sensor_data";
         const API_DATA_TOPIC = "iot/website/api_data";
-        const SENSOR_DATA_TOPIC = "iot/website/sensor_data"; // Topic ที่ ESP32 ส่งมา
+        const DOOR_KNOCK_TOPIC = "iot/door/knock_pattern";
 
-        let mqttClient = null;
+        // Global variables for the latest data (used for 5-min logging)
+        let latestSensorData = {
+            temperature: 'N/A',
+            gasValue: 'N/A',
+            fireDetected: 'false',
+            humidity: 'N/A'
+        };
+        // 💡 แก้ไข: ปรับโครงสร้างข้อมูล API ให้รับเฉพาะ TMD CAP keys
+        let latestAPIData = {
+            stormValue: 'N/A', stormStatus: 'N/A',
+            quakeValue: 'N/A', quakeStatus: 'N/A',
+            floodValue: 'N/A', floodStatus: 'N/A',
+            fullHeadline: 'N/A'
+        };
+        let latestKnockStatus = '0'; // 1=knocked, 0=normal
 
-        // --- 2. MQTT CORE FUNCTIONS ---
-        function connectMQTT() {
-            // 💡 แก้ไข: ตรวจสอบว่า Paho.Client ถูกโหลดมาก่อนเรียกใช้
-            if (typeof Paho.Client === 'undefined') {
-                console.error("Paho MQTT library not loaded correctly! Please check the CDN URL.");
-                // ลองเชื่อมต่อใหม่หากไลบรารีโหลดไม่ทัน
-                setTimeout(connectMQTT, 2000);
-                return;
-            }
+        // --- 2. MQTT CONNECTION & MESSAGE HANDLER ---
+        const client = new Paho.MQTT.Client(MQTT_HOST, MQTT_PORT, "", CLIENT_ID);
 
-            // 💡 แก้ไข: ใช้ new Paho.Client แทน new Paho.MQTT.Client
-            mqttClient = new Paho.Client(MQTT_HOST, MQTT_PORT, "WebClient_" + parseInt(Math.random() * 10000));
-            mqttClient.onConnectionLost = onConnectionLost;
-            mqttClient.onMessageArrived = onMessageArrived;
-            const options = {
-                timeout: 3,
+        client.onConnectionLost = onConnectionLost;
+        client.onMessageArrived = onMessageArrived;
+
+        function doConnect() {
+            console.log(`Connecting to MQTT Broker via WebSocket Secure (WSS) to ${MQTT_HOST}:${MQTT_PORT}...`);
+            client.connect({
                 onSuccess: onConnect,
                 onFailure: onFailure,
-                useSSL: false,
-            };
-            mqttClient.connect(options);
-            console.log("Attempting MQTT connection to Dashboard...");
+                cleanSession: true,
+                useSSL: true,
+                keepAliveInterval: 30
+            });
         }
 
         function onConnect() {
-            console.log("MQTT Connected. Subscribing to data topics...");
-            mqttClient.subscribe(API_DATA_TOPIC);
-            mqttClient.subscribe(SENSOR_DATA_TOPIC);
+            console.log("Connected to MQTT Broker successfully.");
+            client.subscribe(SENSOR_DATA_TOPIC);
+            client.subscribe(API_DATA_TOPIC);
+            client.subscribe(DOOR_KNOCK_TOPIC);
+            console.log(`Subscribed to: ${SENSOR_DATA_TOPIC}, ${API_DATA_TOPIC}, ${DOOR_KNOCK_TOPIC}`);
         }
 
-        function onFailure(message) {
-            console.log("MQTT Connection Failed: " + message.errorMessage);
-            setTimeout(connectMQTT, 5000);
+        function onFailure(responseObject) {
+            console.error("Failed to connect: " + responseObject.errorMessage);
+            setTimeout(doConnect, 5000); // Retry connection
         }
 
         function onConnectionLost(responseObject) {
             if (responseObject.errorCode !== 0) {
-                console.log("Connection Lost: " + responseObject.errorMessage + ". Reconnecting...");
-                setTimeout(connectMQTT, 5000);
+                console.error("Connection lost: " + responseObject.errorMessage);
+                setTimeout(doConnect, 5000); // Reconnect
             }
         }
 
-        // --- 3. DATA PROCESSING: RECEIVES DATA ---
+        // Message Handler (The core of Real-time update - runs every 2s)
         function onMessageArrived(message) {
             try {
-                const data = JSON.parse(message.payloadString);
-                console.log(`Received Data on ${message.destinationName}:`, data);
+                const topic = message.destinationName;
+                const payload = message.payloadString;
 
-                if (message.destinationName === API_DATA_TOPIC) {
-                    updateWeatherDashboard(data);
-                } else if (message.destinationName === SENSOR_DATA_TOPIC) {
-                    updateSensorDashboard(data);
+                if (topic === SENSOR_DATA_TOPIC) {
+                    const data = JSON.parse(payload);
+                    latestSensorData = data;
+                    updateSensorCards(data);
+                } else if (topic === API_DATA_TOPIC) {
+                    const data = JSON.parse(payload);
+                    latestAPIData = data;
+                    updateAPICards(data); // <--- โค้ดนี้ถูกเรียก
+                } else if (topic === DOOR_KNOCK_TOPIC) {
+                    latestKnockStatus = payload;
+                    updateKnockCard(payload);
                 }
             } catch (e) {
-                console.error("Error parsing MQTT data:", e);
+                console.error("Error parsing message:", e);
             }
         }
 
-        // --- 4. DASHBOARD UPDATE FUNCTIONS ---
-        function updateWeatherDashboard(data) {
-            // 1. Earthquake
-            document.getElementById('earthquakeMagnitude').textContent = data.earthquakeMagnitude || 'N/A';
-            document.getElementById('earthquakeDistance').textContent = data.earthquakeDistance || 'N/A';
+        // Function to update the sensor status cards (Fire, Gas, Temp)
+        function updateSensorCards(data) {
+            const isFire = data.fireDetected === 'true'; // Fire alert based on threshold
+            const gasVal = parseInt(data.gasValue);
+            const isGasAlert = gasVal > 1000; // Gas alert threshold
+            const tempVal = parseFloat(data.temperature.replace('°C', ''));
+            const isTempAlert = tempVal > 35.0; // Temp alert threshold
 
-            const eqStatus = data.earthquakeStatus === 'อันตราย' ? 'Danger' : 'Safe';
-            document.getElementById('earthquakeStatus').textContent = eqStatus;
-            document.getElementById('earthquakeStatus').className = eqStatus === 'Danger' ? 'text-red-500' : 'text-green-300';
+            // --- Fire Card ---
+            document.getElementById('fire-status').textContent = isFire ? "มี (DETECTED)" : "ไม่มี (NORMAL)";
+            document.getElementById('card-fire').className = isFire ? 'card shadow-sm card-sensor status-on' : 'card shadow-sm card-sensor status-ok';
+            document.getElementById('fire-status').classList.remove('bg-secondary');
+            document.getElementById('fire-status').classList.add(isFire ? 'bg-danger' : 'bg-success');
 
+            // --- Gas Card ---
+            document.getElementById('gas-value').textContent = gasVal;
+            document.getElementById('card-gas').className = isGasAlert ? 'card shadow-sm card-sensor status-on' : 'card shadow-sm card-sensor status-ok';
 
-            // 2. Flood (using rain data structure)
-            document.getElementById('floodLevel').textContent = data.floodLevel || 'N/A';
-            document.getElementById('floodTrend').textContent = data.floodTrend || 'N/A';
-
-            const floodStatus = data.floodStatus === 'เตือน' ? 'Warning' : 'Normal';
-            document.getElementById('floodStatus').textContent = floodStatus;
-            document.getElementById('floodStatus').className = floodStatus === 'Warning' ? 'text-red-500' : 'text-green-300';
-
-            // 3. Storm
-            document.getElementById('windSpeed').textContent = data.windSpeed || 'N/A';
-            document.getElementById('windDirection').textContent = data.windDirection || 'N/A';
-
-            const stormStatus = data.stormStatus === 'Warning' ? 'Warning' : 'Normal';
-            document.getElementById('stormStatus').textContent = stormStatus;
-            document.getElementById('stormStatus').className = stormStatus === 'Warning' ? 'text-red-500' : 'text-green-300';
-
-            // Update timestamp
-            document.getElementById('lastUpdate').textContent = new Date().toLocaleString('en-US');
+            // --- Temp Card ---
+            document.getElementById('temp-value').textContent = `${data.temperature} / ${data.humidity}`;
+            document.getElementById('card-temp').className = isTempAlert ? 'card shadow-sm card-sensor status-warn' : 'card shadow-sm card-sensor status-ok';
         }
 
-        // *** FUNCTION TO UPDATE ALL SENSOR DATA FROM MQTT ***
-        function updateSensorDashboard(data) {
-            // 1. Temperature & Humidity (DHT22)
-            const tempValue = parseFloat((data.temp || '0°C').replace('°C', ''));
-            const humidValue = parseFloat((data.humidity || '0%').replace('%', ''));
+        // Function to update the door knock / sound status card
+        function updateKnockCard(knockPayload) {
+            const isKnock = knockPayload === '1';
+            const knockBadge = document.getElementById('knock-status');
+            const soundBadge = document.getElementById('sound-status');
+            const knockCard = document.getElementById('card-knock');
 
-            document.getElementById('temperature').textContent = data.temp || 'N/A';
-            document.getElementById('humidity').textContent = data.humidity || 'N/A';
+            knockBadge.textContent = isKnock ? "มี (DETECTED)" : "ไม่มี";
+            soundBadge.textContent = isKnock ? "มี (DETECTED)" : "ไม่มี"; // Simplified: uses same status
 
-            // 2. Fire Detection
-            const isFire = data.fire === "true" || data.fire === "Detected!" || data.fire === "1";
-            document.getElementById('fireStatus').textContent = isFire ? 'Detected!' : 'Normal';
+            const badgeClass = isKnock ? 'bg-info' : 'bg-secondary';
 
-            // 3. Gas Sensor
-            const gasValue = parseFloat(data.gasValue || 0);
-            const isGasAlert = gasValue > 500; // ตั้งค่า Threshold
-            document.getElementById('gasValue').textContent = gasValue.toFixed(0);
-            document.getElementById('gasIndicator').className = 'status-indicator ' + (isGasAlert ? 'status-danger pulse' : 'status-normal');
-            document.getElementById('gasIndicator').nextElementSibling.textContent = isGasAlert ? 'Alert' : 'Normal'; // Update status text
+            knockBadge.className = 'badge ' + badgeClass;
+            soundBadge.className = 'badge ' + badgeClass;
 
-            // 4. Door Knock
-            const isKnocked = data.doorKnock === "true" || data.doorKnock === "1";
-            document.getElementById('doorKnock').textContent = isKnocked ? 'Detected' : 'None';
-            document.getElementById('doorIndicator').className = 'status-indicator ' + (isKnocked ? 'status-warning' : 'status-normal');
-
-            // 5. Mic Sound
-            const micLevelText = data.micLevel || '0 dB';
-            const micLevelValue = parseFloat(micLevelText.replace(' dB', ''));
-            const isMicAlert = micLevelValue > 70; // ตั้งค่า Threshold
-            document.getElementById('micLevel').textContent = micLevelText;
-            document.getElementById('micIndicator').className = 'status-indicator ' + (isMicAlert ? 'status-warning' : 'status-normal');
-
-
-            // 6. Status Indicators 
-            document.getElementById('fireIndicator').className = 'status-indicator ' + (isFire ? 'status-danger pulse' : 'status-normal pulse');
-            document.getElementById('tempIndicator').className = 'status-indicator ' + (tempValue > 35 ? 'status-danger' : 'status-normal');
-            document.getElementById('humidityIndicator').className = 'status-indicator ' + (humidValue > 80 ? 'status-warning' : 'status-normal');
-
-            // Update timestamp (for sensor data)
-            document.getElementById('lastUpdate').textContent = new Date().toLocaleString('en-US');
-
-            logSensorDataToTable();
+            knockCard.className = isKnock ? 'card shadow-sm card-sensor status-info' : 'card shadow-sm card-sensor status-ok';
         }
 
-        // ----------------------------------------------------
-        // --- 5. SENSOR SIMULATION AND TABLE FUNCTIONS ---
-        // ----------------------------------------------------
-
-        function logSensorDataToTable() {
-            const temp = document.getElementById('temperature').textContent.replace('°C', '');
-            const humid = document.getElementById('humidity').textContent.replace('%', '');
-            const gas = document.getElementById('gasValue').textContent;
-            const fire = document.getElementById('fireStatus').textContent;
-
-            const newData = {
-                timestamp: new Date().toLocaleString('en-US'),
-                temperature: temp,
-                humidity: humid,
-                gas: gas,
-                sound: document.getElementById('micLevel').textContent.replace(' dB', ''),
-                fire: fire,
-                door: document.getElementById('doorKnock').textContent,
-                status: (fire === 'Detected!' || parseFloat(temp) > 35 || parseFloat(gas) > 500) ? 'Alert' : 'Normal'
-            };
-
-            sensorData.unshift(newData);
-            if (sensorData.length > 100) sensorData.pop();
-
-            updateTable();
-        }
-
-        function initializeData() {
-            sensorData = [];
-            for (let i = 0; i < 50; i++) {
-                const date = new Date();
-                date.setMinutes(date.getMinutes() - i * 5);
-
-                sensorData.push({
-                    timestamp: date.toLocaleString('en-US'),
-                    temperature: (20 + Math.random() * 15).toFixed(1),
-                    humidity: (40 + Math.random() * 40).toFixed(0),
-                    gas: (50 + Math.random() * 500).toFixed(0),
-                    sound: (30 + Math.random() * 40).toFixed(0),
-                    fire: Math.random() > 0.9 ? 'Detected' : 'Normal',
-                    door: Math.random() > 0.8 ? 'Knocked' : 'None',
-                    status: Math.random() > 0.1 ? 'Normal' : 'Alert'
-                });
+        // 💡 แก้ไข: Function to update the API status cards (ใช้ TMD CAP แทน 3 ช่อง)
+        function updateAPICards(data) {
+            // ฟังก์ชันช่วยเปลี่ยน Severity string เป็น CSS class
+            function getStatusClass(severity) {
+                switch (severity) {
+                    case 'Extreme':
+                    case 'Severe':
+                        return 'status-on'; // Red/Alert
+                    case 'Moderate':
+                    case 'Minor':
+                        return 'status-warn'; // Yellow/Warning
+                    case 'Unknown':
+                    case 'None':
+                    case 'N/A':
+                    default:
+                        return 'status-ok'; // Green/Normal
+                }
             }
-            updateTable();
-        }
-        function updateTable() {
-            const tbody = document.getElementById('dataTableBody');
-            const start = (currentPage - 1) * recordsPerPage;
-            const end = start + recordsPerPage;
-            const pageData = sensorData.slice(start, end);
-            tbody.innerHTML = '';
-            pageData.forEach(row => {
-                const tr = document.createElement('tr');
-                tr.className = 'border-b border-white border-opacity-20 hover:bg-white hover:bg-opacity-10';
-                tr.innerHTML = `
-                    <td class="px-4 py-3">${row.timestamp}</td>
-                    <td class="px-4 py-3">${row.temperature}</td>
-                    <td class="px-4 py-3">${row.humidity}</td>
-                    <td class="px-4 py-3">${row.gas}</td>
-                    <td class="px-4 py-3">${row.sound}</td>
-                    <td class="px-4 py-3">
-                        <span class="px-2 py-1 rounded text-xs ${row.fire === 'Normal' ? 'bg-green-500' : 'bg-red-500'}">${row.fire}</span>
-                    </td>
-                    <td class="px-4 py-3">${row.door}</td>
-                    <td class="px-4 py-3">
-                        <span class="px-2 py-1 rounded text-xs ${row.status === 'Normal' ? 'bg-green-500' : 'bg-yellow-500'}">${row.status}</span>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
 
-            document.getElementById('recordCount').textContent = sensorData.length;
-            document.getElementById('currentPage').textContent = currentPage;
-        }
-        function nextPage() {
-            const maxPage = Math.ceil(sensorData.length / recordsPerPage);
-            if (currentPage < maxPage) {
-                currentPage++;
-                updateTable();
+            // ฟังก์ชันช่วยเปลี่ยน Severity string เป็น Badge class
+            function getBadgeClass(severity) {
+                switch (severity) {
+                    case 'Extreme':
+                    case 'Severe':
+                        return 'bg-danger';
+                    case 'Moderate':
+                    case 'Minor':
+                        return 'bg-warning';
+                    case 'Unknown':
+                    case 'None':
+                    case 'N/A':
+                    default:
+                        return 'bg-success';
+                }
             }
+
+            // --- Storm Card (แสดง Headline พายุ) ---
+            const stormStatus = data.stormStatus;
+            const isStormAlert = stormStatus === 'Severe' || stormStatus === 'Moderate' || stormStatus === 'Extreme';
+            document.getElementById('wind-speed').textContent = data.stormValue.replace('Headline: ', ''); // แสดง Headline แทนความเร็วลม
+            document.getElementById('storm-status').textContent = stormStatus;
+
+            const stormCardClass = getStatusClass(stormStatus);
+            document.getElementById('card-storm').className = `card shadow-sm card-sensor ${stormCardClass}`;
+
+            document.getElementById('storm-status').classList.remove('bg-secondary');
+            document.getElementById('storm-status').className = `badge badge-status ${getBadgeClass(stormStatus)}`;
+
+
+            // --- Earthquake Card (แสดง Headline แผ่นดินไหว) ---
+            const quakeStatus = data.quakeStatus;
+            const isQuakeAlert = quakeStatus === 'Severe' || quakeStatus === 'Moderate' || quakeStatus === 'Extreme';
+            document.getElementById('quake-mag').textContent = data.quakeValue.replace('Headline: ', ''); // แสดง Headline แทน Magnitude
+            document.getElementById('quake-status').textContent = quakeStatus;
+
+            const quakeCardClass = getStatusClass(quakeStatus);
+            document.getElementById('card-quake').className = `card shadow-sm card-sensor ${quakeCardClass}`;
+
+            document.getElementById('quake-status').classList.remove('bg-secondary');
+            document.getElementById('quake-status').className = `badge badge-status ${getBadgeClass(quakeStatus)}`;
+
+
+            // --- Flood Card (แสดง Headline ฝน/น้ำท่วม) ---
+            const floodStatus = data.floodStatus;
+            const isFloodAlert = floodStatus === 'Severe' || floodStatus === 'Moderate' || floodStatus === 'Extreme';
+            document.getElementById('flood-level').textContent = data.floodValue.replace('Headline: ', ''); // แสดง Headline แทนปริมาณฝน
+            document.getElementById('flood-status').textContent = floodStatus;
+
+            const floodCardClass = getStatusClass(floodStatus);
+            document.getElementById('card-flood').className = `card shadow-sm card-sensor ${floodCardClass}`;
+
+            document.getElementById('flood-status').classList.remove('bg-secondary');
+            document.getElementById('flood-status').className = `badge badge-status ${getBadgeClass(floodStatus)}`;
         }
-        function prevPage() {
-            if (currentPage > 1) {
-                currentPage--;
-                updateTable();
+
+        // --- 4. DATA LOGGING FUNCTION (Every 5 minutes) ---
+        function logDataToTable() {
+            const now = new Date();
+            const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+
+            // Collect data from global variables
+            const fireAlert = latestSensorData.fireDetected === 'true' ? 'Yes' : 'No';
+            const doorKnock = latestKnockStatus === '1' ? 'Yes' : 'No';
+
+            // 💡 แก้ไข: การ Log ข้อมูล API
+            // เนื่องจากลบ API เดิมออกหมดแล้ว ให้ Log เป็นค่า TMD CAP แทน
+            const windLog = latestAPIData.stormStatus === 'N/A' ? 'N/A' : `[TMD] ${latestAPIData.stormStatus}`;
+            const quakeLog = latestAPIData.quakeStatus === 'N/A' ? 'N/A' : `[TMD] ${latestAPIData.quakeStatus}`;
+
+            // (หมายเหตุ: ตาราง Log มีคอลัมน์จำกัด จึงต้องใช้การแสดงผลแบบนี้)
+            const newRow = `
+        <tr>
+            <td>${timestamp}</td>
+            <td>${latestSensorData.temperature.replace('°C', '')}</td>
+            <td>${latestSensorData.gasValue}</td>
+            <td>${fireAlert}</td>
+            <td>${doorKnock}</td>
+            <td>${windLog}</td> 
+            <td>${quakeLog}</td>
+        </tr>
+    `;
+
+            // Insert new row at the top of the table
+            const logTableBody = document.getElementById('log-table-body');
+            logTableBody.insertAdjacentHTML('afterbegin', newRow);
+
+            // จำกัดจำนวนแถวในตารางไม่ให้มากเกินไป
+            if (logTableBody.rows.length > 50) {
+                logTableBody.deleteRow(logTableBody.rows.length - 1);
             }
-        }
-        function refreshData() {
-            logSensorDataToTable();
-        }
-        function exportData() {
-            const csvContent = "data:text/csv;charset=utf-8,"
-                + "Time,Temperature,Humidity,Gas,Sound,Fire,Door,Status\n"
-                + sensorData.map(row =>
-                    `${row.timestamp},${row.temperature},${row.humidity},${row.gas},${row.sound},${row.fire},${row.door},${row.status}`
-                ).join("\n");
 
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", "sensor_data.csv");
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            console.log(`[LOG] Data recorded at ${timestamp}`);
         }
 
+        // --- 5. INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // 1. Start MQTT Connection
+            doConnect();
 
-        // --- 6. INITIALIZATION ---
-        initializeData();
-        connectMQTT();
+            // 2. Set interval for 5-minute logging (300,000 ms)
+            setInterval(logDataToTable, 5 * 60 * 1000);
 
+            // Initial log to confirm system start
+            logDataToTable();
+        });
     </script>
 </body>
-
 </html>
